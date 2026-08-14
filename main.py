@@ -1,87 +1,153 @@
 import gradio as gr
+import os
 
 from pdf_reader import read_pdf
 from rag import create_database, search_context
-from ai_chat import ask_ai
 
 
+# 当前知识库文件
+current_file = ""
+
+
+# =========================
+# 上传PDF
+# =========================
 
 def upload_pdf(file):
 
+    global current_file
+
     if file is None:
-        return "请选择PDF文件"
+        return "❌ 请先上传PDF"
+
+
+    path = file.name
+
+    current_file = os.path.basename(path)
 
 
     try:
 
-        text = read_pdf(file.name)
+        text = read_pdf(path)
 
 
         chunks = create_database(text)
 
 
         return f"""
-PDF上传成功！
+✅ 知识库建立成功
 
-文字长度：
-{text.__len__()}
+文件：
+{current_file}
 
-知识库建立完成！
+文本长度：
+{len(text)}
 
-文本块数量：
+知识块数量：
 {chunks}
 
-现在可以提问。
+可以开始提问
 """
 
 
     except Exception as e:
 
-        return f"读取失败：{e}"
+        return f"❌ 建库失败：{e}"
 
 
 
+# =========================
+# 聊天
+# =========================
+
+def chat(message, history):
 
 
-def chat(question):
+    if not message:
 
-    if not question:
-
-        return "请输入问题"
-
+        return history
 
 
     try:
 
-        context = search_context(question)
 
-
-        if not context:
-
-            return "没有找到相关教材内容"
+        context = search_context(message)
 
 
 
-        answer = ask_ai(
-
-            question,
-
-            context
-
-        )
+        if context:
 
 
-        return answer
+            answer = f"""
+📚 根据知识库内容：
 
+{context}
+
+
+-----------------
+
+🤖 AI分析：
+
+你的问题：
+{message}
+
+
+以上内容来自上传教材，我会继续结合资料进行分析。
+"""
+
+
+        else:
+
+
+            answer = """
+❌ 没有找到相关知识。
+
+请确认：
+1. 是否已经建立知识库
+2. 问题是否和教材内容相关
+"""
 
 
     except Exception as e:
 
-        return f"回答失败：{e}"
+        answer = f"系统错误：{e}"
 
 
 
+    history.append(
+        {
+            "role":"user",
+            "content":message
+        }
+    )
 
+
+    history.append(
+        {
+            "role":"assistant",
+            "content":answer
+        }
+    )
+
+
+    return history
+
+
+
+# =========================
+# 快捷功能
+# =========================
+
+
+def quick_question(text):
+
+    return text
+
+
+
+# =========================
+# UI
+# =========================
 
 
 with gr.Blocks(
@@ -91,74 +157,150 @@ with gr.Blocks(
 
     gr.Markdown(
         """
-# 📚 AI学习助手 RAG版
+# 📚 AI学习助手
 
-上传PDF教材，让AI基于教材回答问题。
+基于 RAG + 大语言模型的私人知识库助手
+
+上传教材PDF，建立你的专属AI老师。
 """
     )
 
 
 
-    pdf = gr.File(
-        label="上传PDF教材",
-        file_types=[".pdf"]
+    with gr.Row():
+
+
+        with gr.Column(scale=1):
+
+
+            pdf = gr.File(
+                label="上传PDF教材",
+                file_types=[".pdf"]
+            )
+
+
+            upload_btn = gr.Button(
+                "🚀 建立知识库"
+            )
+
+
+            status = gr.Textbox(
+                label="知识库状态",
+                lines=8
+            )
+
+
+
+        with gr.Column(scale=3):
+
+
+            chatbot = gr.Chatbot(
+                label="🤖 AI学习助手",
+                height=450
+            )
+
+
+            msg = gr.Textbox(
+                placeholder="请输入问题，例如：总结这篇文章"
+            )
+
+
+            with gr.Row():
+
+                send = gr.Button(
+                    "发送 ▶"
+                )
+
+
+                clear = gr.Button(
+                    "清空聊天"
+                )
+
+
+
+    gr.Markdown(
+        "## ⚡ 快捷功能"
     )
 
 
-    status = gr.Textbox(
-        label="状态"
-    )
+    with gr.Row():
 
 
-    pdf.upload(
+        btn1 = gr.Button(
+            "📌 提炼重点"
+        )
 
+
+        btn2 = gr.Button(
+            "📝 生成考试题"
+        )
+
+
+        btn3 = gr.Button(
+            "💡 解释难点"
+        )
+
+
+
+    # 事件
+
+    upload_btn.click(
         upload_pdf,
-
         inputs=pdf,
-
         outputs=status
-
     )
 
 
 
-    question = gr.Textbox(
-
-        label="请输入问题",
-
-        placeholder="例如：这篇文章主要讲什么？"
-
-    )
-
-
-
-    button = gr.Button(
-        "开始回答"
-    )
-
-
-
-    answer = gr.Textbox(
-
-        label="AI回答",
-
-        lines=20
-
-    )
-
-
-
-    button.click(
-
+    send.click(
         chat,
-
-        inputs=question,
-
-        outputs=answer
-
+        inputs=[
+            msg,
+            chatbot
+        ],
+        outputs=chatbot
+    ).then(
+        lambda:""
+        ,
+        outputs=msg
     )
 
 
+
+    msg.submit(
+        chat,
+        inputs=[
+            msg,
+            chatbot
+        ],
+        outputs=chatbot
+    )
+
+
+
+    clear.click(
+        lambda:[],
+        outputs=chatbot
+    )
+
+
+
+    btn1.click(
+        lambda:"请提炼教材重点",
+        outputs=msg
+    )
+
+
+    btn2.click(
+        lambda:"请根据教材生成考试题",
+        outputs=msg
+    )
+
+
+    btn3.click(
+        lambda:"请解释教材中的难点",
+        outputs=msg
+    )
 
 
 
