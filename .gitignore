@@ -13,3 +13,21 @@ data/
 chroma_db/
 
 .vscode/
+
+# python
+__pycache__/
+*.pyc
+
+# environment
+.env
+.venv/
+
+# database
+database/
+*.sqlite3
+
+# pdf data
+data/
+
+# model cache
+.cache/
